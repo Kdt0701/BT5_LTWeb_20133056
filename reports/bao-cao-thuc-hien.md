@@ -39,3 +39,44 @@ Chưa có CRUD controller/JSP, SiteMesh decorator/Bootstrap admin template đầ
 - Mail dùng Spring Mail/JavaMailSender, HTML UTF-8, nhận diện KHANGGEAR và hai nội dung riêng cho xác minh email/đặt lại mật khẩu. Không ghi OTP, mật khẩu hay SMTP secret vào log.
 - Đã đọc các service/controller/JSP OTP của dự án cũ để mapping; không sửa dự án cũ. `setenv.bat` Tomcat được kiểm tra theo tên biến, không đọc hoặc ghi giá trị nhạy cảm.
 - Kiểm thử Gmail/SQL Server/Tomcat thật sẽ chỉ được ghi nhận sau khi có cấu hình runtime cho dự án mới; test tự động dùng H2 và mock mail, không gửi email thật.
+
+# Bao cao Giai doan 3C - Kiem thu SQL Server, Gmail va Tomcat
+
+## Ket qua SQL Server
+
+- SQL Server Express dang chay va ket noi Windows Authentication chi-doc thanh cong.
+- Da tao idempotent database rieng `KhangGearVer2DB` bang `sql/create-database.sql`, sau do chay `sql/schema.sql`. Khong drop database, bang hay du lieu va khong ghi vao database cua ung dung cu.
+- Da xac nhan schema co `users`, `categories`, `email_otps`; `users` co `active`, `email_verified`, `role`; OTP co user, purpose, hash, expiry, consumed, attempts va last-sent.
+
+## Tomcat va HTTP
+
+- External Tomcat dung tai `C:\\apache-tomcat-11.0.25`; context cu `/dangnhap` da duoc kiem tra HTTP 200 truoc va sau deploy.
+- Da deploy rieng `khanggear-ver2.war`, khong thay the `dangnhap.war`.
+- Phat hien WAR Spring Boot thieu `SpringBootServletInitializer.configure`, lam context moi tra 404. Da sua trong commit `12e5d23` va them regression test cho bootstrap external Tomcat.
+- Sau sua, log xac nhan Spring Web initializer da chay. Context moi chua khoi dong vi datasource production chua nhan duoc JDBC URL/credential, nen `/khanggear-ver2/login` chua the tra HTML.
+
+## SMTP va phan con thieu
+
+- `setenv.bat` ton tai va co nhom bien `SMTP_*`; khong co `MAIL_*` hay `SQLSERVER_*` duoc phat hien. Gia tri nhay cam khong duoc doc, ghi log hay dua vao repository.
+- Gmail OTP that chua the kiem thu vi context moi bi chan o datasource truoc khi vao form. Khong gui email, khong tao OTP that va khong xu ly email ca nhan.
+- Can cau hinh runtime cho Tomcat bang `SQLSERVER_URL`, `SQLSERVER_USERNAME`, `SQLSERVER_PASSWORD` cua database `KhangGearVer2DB`, sau do restart Tomcat. `MAIL_*` hoac `SMTP_*` da duoc code ho tro de kiem thu Gmail.
+
+## Build
+
+- `mvn clean test`: pass 17/17.
+- `mvn clean package`: pass, tao `target/khanggear-ver2.war`.
+
+## Bo sung 3C - Cau hinh runtime local va chan doan Tomcat
+
+### Nguyen nhan external Tomcat khong phuc vu duoc ung dung moi
+
+- Log cho thay context `khanggear-ver2` dung o khoi tao datasource do runtime cua external Tomcat chua co `SQLSERVER_URL`, `SQLSERVER_USERNAME`, `SQLSERVER_PASSWORD`. Hibernate khong lay duoc JDBC metadata nen khong the khoi tao dialect; day la blocker cua ung dung moi.
+- Mot lan khoi dong Tomcat khac that bai do cong `8080` va shutdown port `8005` dang duoc Tomcat dang chay su dung. Log sau do ghi nhan lenh shutdown hop le; khong co bang chung Community Server Connector lam Tomcat crash.
+- Cac canh bao `--add-opens` va canh bao cleanup JDBC xuat hien luc Tomcat dung, khong phai nguyen nhan goc. Deployment chi co `khanggear-ver2.war`; ung dung cu `dangnhap` khong bi thay the.
+
+### Chay local an toan
+
+- Da them `.vscode/launch.json` voi cau hinh `Run KhangGearVer2 (local SQL + Gmail)`. Cau hinh chay main class Spring Boot tren cong `8081`, context `/khanggear-ver2`, va doc properties tu `.env.local` qua `spring.config.additional-location`.
+- Da them `.env.local.example` chi chua placeholder cho `SQLSERVER_URL`, `SQLSERVER_USERNAME`, `SQLSERVER_PASSWORD` va `MAIL_*`. File `.env.local` bi Git ignore; credential khong nam trong launch configuration, README hay bao cao.
+- Smoke test WAR voi profile `security-test` tren embedded Tomcat da tra HTTP 200 va HTML khac rong cho `/khanggear-ver2/login`, `/khanggear-ver2/register` va `/khanggear-ver2/forgot-password`. Profile nay dung H2 de kiem tra JSP/runtime, khong gui Gmail that.
+- SQL Server/Gmail that qua external Tomcat chua the kiem thu tiep cho den khi nguoi van hanh khai bao ba bien `SQLSERVER_*` trong runtime cua Tomcat cho database rieng `KhangGearVer2DB` va restart dung instance Tomcat.
